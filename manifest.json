@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "QQ Chess PGN Exporter",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "导出天天象棋最近对局为 PGN 格式",
   "permissions": ["storage"],
   "action": {
