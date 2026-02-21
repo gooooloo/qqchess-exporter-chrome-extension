@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "QQ Chess PGN Exporter",
+  "version": "1.0.0",
+  "description": "导出天天象棋最近对局为 PGN 格式",
+  "permissions": ["storage"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icons/icon48.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.qqchess.qq.com/*", "*://ke.wechess.cn/*"],
+      "js": ["bridge.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://*.qqchess.qq.com/*", "*://ke.wechess.cn/*"],
+      "js": ["pgn.js", "content.js"],
+      "run_at": "document_idle",
+      "world": "MAIN"
+    }
+  ],
+  "icons": {
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
