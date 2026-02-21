@@ -36,6 +36,14 @@
     return y + '.' + m + '.' + day;
   }
 
+  function formatTime(timestamp) {
+    var d = new Date(timestamp * 1000);
+    var h = ('0' + d.getHours()).slice(-2);
+    var min = ('0' + d.getMinutes()).slice(-2);
+    var s = ('0' + d.getSeconds()).slice(-2);
+    return h + ':' + min + ':' + s;
+  }
+
   function escapeHeader(val) {
     if (!val) return '';
     return String(val).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -48,6 +56,7 @@
 
     var event = metadata.event || '';
     var date = metadata.createTime ? formatDate(metadata.createTime) : '????.??.??';
+    var time = metadata.createTime ? formatTime(metadata.createTime) : '';
 
     var redName = userinfo.redname || '?';
     var blackName = userinfo.blackname || '?';
@@ -66,6 +75,7 @@
     if (event) headers.push('[Event "' + escapeHeader(event) + '"]');
     headers.push('[Site "h5login.qqchess.qq.com"]');
     headers.push('[Date "' + date + '"]');
+    if (time) headers.push('[Time "' + time + '"]');
     headers.push('[Red "' + escapeHeader(redName) + '"]');
     headers.push('[Black "' + escapeHeader(blackName) + '"]');
     if (redTeam) headers.push('[RedTeam "' + escapeHeader(redTeam) + '"]');
