@@ -1,9 +1,17 @@
 (function() {
   var PAGE_SIZE = 50;
+  var LIST_SIZE = 20;
+  var lastLoadedGames = [];
 
   window.addEventListener('message', function(event) {
     if (event.data && event.data.type === 'QQCHESS_EXPORT_REQUEST') {
       exportGames();
+    }
+    if (event.data && event.data.type === 'QQCHESS_LOAD_LIST_REQUEST') {
+      loadGameList();
+    }
+    if (event.data && event.data.type === 'QQCHESS_EXPORT_SELECTED_REQUEST') {
+      exportSelected(event.data.payload.qipuIds);
     }
   });
 
@@ -103,7 +111,8 @@
     var qipuModel;
     try {
       qipuModel = fdk.getModel("QipuModel");
-    } catch (e) {
+    } catch (e) {}
+    if (!qipuModel) {
       sendError('无法获取 QipuModel，请确保在游戏页面中');
       return;
     }
@@ -253,5 +262,185 @@
     for (var i = 0; i < initialBatch; i++) {
       processGame(i);
     }
+  }
+
+  function sendGameList(games) {
+    window.postMessage({ type: 'QQCHESS_GAME_LIST', payload: { games: games } }, '*');
+  }
+
+  var DRAW_TYPES = {3: true, 5: true, 6: true, 12: true, 14: true};
+
+  function parseResult(sData) {
+    if (!sData) return '未知';
+    var r = sData.result;
+    if (r === '1-0') return '红胜';
+    if (r === '0-1') return '黑胜';
+    if (r === '1/2-1/2') return '和棋';
+    if (DRAW_TYPES[sData.resultType]) return '和棋';
+    return '未知';
+  }
+
+  function getPlayerNames(sData) {
+    var userinfo = sData && sData.userinfo || {};
+    return {
+      redName: userinfo.redname || '红方',
+      blackName: userinfo.blackname || '黑方'
+    };
+  }
+
+  function loadGameList() {
+    var qipuModel;
+    try {
+      qipuModel = fdk.getModel("QipuModel");
+    } catch (e) {}
+    if (!qipuModel) {
+      sendError('无法获取 QipuModel，请确保在游戏页面中');
+      return;
+    }
+
+    sendProgress({ message: '正在加载最近对局...' });
+
+    fetchPage(qipuModel, 1).then(function(pageGames) {
+      var games = pageGames.slice(0, LIST_SIZE);
+      if (games.length === 0) {
+        sendGameList([]);
+        return;
+      }
+
+      var total = games.length;
+      var CONCURRENCY = 5;
+      var DELAY = 200;
+      var loadedGames = new Array(total);
+      var completed = 0;
+      var nextIdx = 0;
+
+      function onGameLoaded() {
+        completed++;
+        sendProgress({
+          message: '正在加载 ' + completed + '/' + total + ' ...'
+        });
+
+        if (completed >= total) {
+          lastLoadedGames = [];
+          for (var i = 0; i < loadedGames.length; i++) {
+            if (loadedGames[i]) lastLoadedGames.push(loadedGames[i]);
+          }
+          sendGameList(lastLoadedGames.map(function(g) {
+            return {
+              qipuId: g.qipuId,
+              createTime: g.metadata.createTime,
+              redName: g.redName,
+              blackName: g.blackName,
+              result: g.result
+            };
+          }));
+        }
+      }
+
+      function processListGame(idx) {
+        if (idx >= total) return;
+        var game = games[idx];
+
+        var cachedData = cacheGet(game.qipuId);
+        if (cachedData) {
+          var sData = cachedData.sData;
+          var names = getPlayerNames(sData);
+          loadedGames[idx] = {
+            qipuId: game.qipuId,
+            sData: sData,
+            metadata: cachedData.metadata,
+            redName: names.redName,
+            blackName: names.blackName,
+            result: parseResult(sData)
+          };
+          onGameLoaded();
+          var next = nextIdx++;
+          if (next < total) processListGame(next);
+          return;
+        }
+
+        fetchQipuData(qipuModel, game.qipuId)
+          .then(function(collectData) {
+            var sData;
+            try {
+              sData = JSON.parse(collectData.sData);
+            } catch (e) {
+              sData = collectData.sData;
+            }
+
+            var extPlayers = [];
+            if (game.$0a && game.$0a.Md && game.$0a.Md.val) {
+              var vals = game.$0a.Md.val;
+              for (var j = 0; j < vals.length; j++) {
+                extPlayers.push(vals[j]);
+              }
+            }
+
+            var metadata = {
+              createTime: game.createTime,
+              event: '',
+              extPlayers: extPlayers
+            };
+
+            cacheSet(game.qipuId, { sData: sData, metadata: metadata });
+
+            var names = getPlayerNames(sData);
+            loadedGames[idx] = {
+              qipuId: game.qipuId,
+              sData: sData,
+              metadata: metadata,
+              redName: names.redName,
+              blackName: names.blackName,
+              result: parseResult(sData)
+            };
+            onGameLoaded();
+
+            sleep(DELAY).then(function() {
+              var next = nextIdx++;
+              if (next < total) processListGame(next);
+            });
+          })
+          .catch(function(err) {
+            console.error('Failed to fetch qipu ' + game.qipuId + ':', err);
+            onGameLoaded();
+            sleep(DELAY).then(function() {
+              var next = nextIdx++;
+              if (next < total) processListGame(next);
+            });
+          });
+      }
+
+      var initialBatch = Math.min(CONCURRENCY, total);
+      nextIdx = initialBatch;
+      for (var i = 0; i < initialBatch; i++) {
+        processListGame(i);
+      }
+    });
+  }
+
+  function exportSelected(qipuIds) {
+    var idSet = {};
+    for (var i = 0; i < qipuIds.length; i++) {
+      idSet[qipuIds[i]] = true;
+    }
+
+    var selected = [];
+    for (var j = 0; j < lastLoadedGames.length; j++) {
+      if (idSet[lastLoadedGames[j].qipuId]) {
+        selected.push({ sData: lastLoadedGames[j].sData, metadata: lastLoadedGames[j].metadata });
+      }
+    }
+
+    if (selected.length === 0) {
+      sendError('没有找到选中的对局数据');
+      return;
+    }
+
+    var pgn = window.QQChessPGN.generateMultiPGN(selected);
+    var now = new Date();
+    var filename = 'qqchess_' + now.getFullYear() +
+      ('0' + (now.getMonth() + 1)).slice(-2) +
+      ('0' + now.getDate()).slice(-2) + '.pgn';
+    sendDone({ count: selected.length, pgn: pgn, filename: filename });
   }
 })();

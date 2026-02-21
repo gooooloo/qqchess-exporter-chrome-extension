@@ -8,6 +8,17 @@
       window.postMessage({ type: 'QQCHESS_EXPORT_REQUEST' }, '*');
       sendResponse({ ok: true });
     }
+    if (message.action === 'loadList') {
+      window.postMessage({ type: 'QQCHESS_LOAD_LIST_REQUEST' }, '*');
+      sendResponse({ ok: true });
+    }
+    if (message.action === 'exportSelected') {
+      window.postMessage({
+        type: 'QQCHESS_EXPORT_SELECTED_REQUEST',
+        payload: { qipuIds: message.qipuIds }
+      }, '*');
+      sendResponse({ ok: true });
+    }
   });
 
   // 监听来自 content.js (MAIN world) 的 window.postMessage
@@ -41,6 +52,13 @@
     }
 
     // 转发进度/完成/错误消息给 popup
+    if (data.type === 'QQCHESS_GAME_LIST') {
+      chrome.runtime.sendMessage({
+        type: data.type,
+        payload: data.payload
+      });
+    }
+
     if (data.type === 'QQCHESS_EXPORT_PROGRESS' ||
         data.type === 'QQCHESS_EXPORT_DONE' ||
         data.type === 'QQCHESS_EXPORT_ERROR') {

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <style>
 body {
-  width: 300px;
+  width: 400px;
   padding: 16px;
   font-family: -apple-system, "Microsoft YaHei", sans-serif;
   font-size: 14px;
@@ -15,21 +15,32 @@ h1 {
   margin: 0 0 12px 0;
   text-align: center;
 }
-#exportBtn {
-  display: block;
-  width: 100%;
+.btn-row {
+  display: flex;
+  gap: 8px;
+}
+#exportBtn, #selectExportBtn {
+  flex: 1;
   padding: 12px;
   font-size: 15px;
-  background: #e74c3c;
   color: #fff;
   border: none;
   border-radius: 6px;
   cursor: pointer;
 }
+#exportBtn {
+  background: #e74c3c;
+}
 #exportBtn:hover {
   background: #c0392b;
 }
-#exportBtn:disabled {
+#selectExportBtn {
+  background: #3498db;
+}
+#selectExportBtn:hover {
+  background: #2980b9;
+}
+#exportBtn:disabled, #selectExportBtn:disabled {
   background: #bbb;
   cursor: not-allowed;
 }
@@ -39,12 +50,111 @@ h1 {
   text-align: center;
   color: #666;
 }
+#gameListPanel {
+  display: none;
+  margin-top: 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #f5f5f5;
+  border-bottom: 1px solid #ddd;
+}
+.list-header label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+#gameListContainer {
+  max-height: 300px;
+  overflow-y: auto;
+}
+.game-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-bottom: 1px solid #eee;
+  font-size: 13px;
+  cursor: pointer;
+}
+.game-item:last-child {
+  border-bottom: none;
+}
+.game-item:hover {
+  background: #f9f9f9;
+}
+.game-item input[type="checkbox"] {
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+.game-date {
+  color: #999;
+  margin-right: 8px;
+  white-space: nowrap;
+}
+.game-players {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.game-result {
+  margin-left: 8px;
+  font-weight: bold;
+  white-space: nowrap;
+}
+.result-red { color: #e74c3c; }
+.result-black { color: #333; }
+.result-draw { color: #f39c12; }
+.list-footer {
+  padding: 8px 12px;
+  border-top: 1px solid #ddd;
+  background: #f5f5f5;
+}
+#exportSelectedBtn {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  font-size: 14px;
+  background: #27ae60;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+#exportSelectedBtn:hover {
+  background: #219a52;
+}
+#exportSelectedBtn:disabled {
+  background: #bbb;
+  cursor: not-allowed;
+}
 </style>
 </head>
 <body>
   <h1>天天象棋棋谱导出</h1>
-  <button id="exportBtn">导出全部对局</button>
+  <div class="btn-row">
+    <button id="exportBtn">导出全部对局</button>
+    <button id="selectExportBtn">选择导出</button>
+  </div>
   <div id="status"></div>
+  <div id="gameListPanel">
+    <div class="list-header">
+      <label><input type="checkbox" id="selectAll"> 全选</label>
+      <span id="selectedCount">已选 0 局</span>
+    </div>
+    <div id="gameListContainer"></div>
+    <div class="list-footer">
+      <button id="exportSelectedBtn" disabled>导出选中 (0)</button>
+    </div>
+  </div>
   <script src="popup.js"></script>
 </body>
 </html>
