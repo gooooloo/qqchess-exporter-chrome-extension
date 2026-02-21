@@ -61,7 +61,8 @@
   function formatDate(timestamp) {
     if (!timestamp) return '';
     var d = new Date(timestamp * 1000);
-    return (d.getMonth() + 1) + '/' + d.getDate();
+    return (d.getMonth() + 1) + '/' + d.getDate() + ' ' +
+      ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
   }
 
   function getResultClass(result) {
@@ -84,6 +85,9 @@
   }
 
   function renderGameList(games) {
+    games.sort(function(a, b) {
+      return (b.createTime || 0) - (a.createTime || 0);
+    });
     currentGames = games;
     gameListContainer.innerHTML = '';
 
