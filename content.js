@@ -1,4 +1,7 @@
 (function() {
+  if (window.__qqchess_content_loaded) return;
+  window.__qqchess_content_loaded = true;
+
   var PAGE_SIZE = 50;
   var LIST_SIZE = 20;
   var lastLoadedGames = [];
@@ -75,19 +78,6 @@
     return new Promise(function(resolve) { setTimeout(resolve, ms); });
   }
 
-  function downloadBlob(content, filename) {
-    var blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function() {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 100);
-  }
 
   // 用 Sj 请求一页，等 2 秒让 Beb 填满，然后读取
   function fetchPage(qipuModel, pageNum) {
@@ -194,8 +184,7 @@
         var filename = 'qqchess_' + now.getFullYear() +
           ('0' + (now.getMonth() + 1)).slice(-2) +
           ('0' + now.getDate()).slice(-2) + '.pgn';
-        downloadBlob(pgn, filename);
-        sendDone({ count: finalResults.length, cached: cached, fetched: fetched });
+        sendDone({ count: finalResults.length, cached: cached, fetched: fetched, pgn: pgn, filename: filename });
       }
     }
 

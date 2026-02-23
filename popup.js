@@ -10,18 +10,9 @@
 
   var currentGames = [];
 
-  function downloadBlob(content, filename) {
-    var blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function() {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 100);
+  function triggerDownload(content, filename) {
+    // 发消息给 bridge.js，让它在页面 DOM 上触发下载（兼容 Safari）
+    sendToTab({ action: 'download', pgn: content, filename: filename });
   }
 
   function sendToTab(message) {
@@ -179,7 +170,7 @@
     if (message.type === 'QQCHESS_EXPORT_DONE') {
       var d = message.payload;
       if (d.pgn && d.filename) {
-        downloadBlob(d.pgn, d.filename);
+        triggerDownload(d.pgn, d.filename);
       }
       if (d.count === 0) {
         statusEl.textContent = d.message || '没有找到对局';
