@@ -7,8 +7,35 @@
   var selectAllCheckbox = document.getElementById('selectAll');
   var selectedCountEl = document.getElementById('selectedCount');
   var exportSelectedBtn = document.getElementById('exportSelectedBtn');
+  var sendLocalBtn = document.getElementById('sendLocalBtn');
+  var portInput = document.getElementById('portInput');
 
   var currentGames = [];
+  var pendingAction = 'download'; // 'download' or 'sendLocal'
+
+  function getPort() {
+    return portInput.value.trim() || '9213';
+  }
+
+  function sendToLocalService(pgn, count, cached) {
+    var port = getPort();
+    statusEl.textContent = '正在发送到 localhost:' + port + '...';
+    fetch('http://localhost:' + port, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: pgn
+    }).then(function(resp) {
+      if (resp.ok) {
+        var detail = '已发送 ' + count + ' 局到 localhost:' + port;
+        if (cached > 0) detail += '（其中 ' + cached + ' 局来自缓存）';
+        statusEl.textContent = detail;
+      } else {
+        statusEl.textContent = '发送失败：服务返回 HTTP ' + resp.status;
+      }
+    }).catch(function() {
+      statusEl.textContent = '发送失败：无法连接到 localhost:' + port;
+    });
+  }
 
   function triggerDownload(content, filename) {
     // 发消息给 bridge.js，让它在页面 DOM 上触发下载（兼容 Safari）
@@ -72,6 +99,7 @@
     selectedCountEl.textContent = '已选 ' + count + ' 局';
     exportSelectedBtn.textContent = '导出选中 (' + count + ')';
     exportSelectedBtn.disabled = count === 0;
+    sendLocalBtn.disabled = count === 0;
     selectAllCheckbox.checked = count === checkboxes.length && count > 0;
   }
 
@@ -133,16 +161,32 @@
     updateSelectedCount();
   });
 
-  exportSelectedBtn.addEventListener('click', function() {
+  function getSelectedQipuIds() {
     var checkboxes = gameListContainer.querySelectorAll('input[type="checkbox"]:checked');
     var qipuIds = [];
     for (var i = 0; i < checkboxes.length; i++) {
       qipuIds.push(checkboxes[i].dataset.qipuId);
     }
-    if (qipuIds.length === 0) return;
+    return qipuIds;
+  }
 
+  exportSelectedBtn.addEventListener('click', function() {
+    var qipuIds = getSelectedQipuIds();
+    if (qipuIds.length === 0) return;
+    pendingAction = 'download';
     exportSelectedBtn.disabled = true;
+    sendLocalBtn.disabled = true;
     statusEl.textContent = '正在导出...';
+    sendToTab({ action: 'exportSelected', qipuIds: qipuIds });
+  });
+
+  sendLocalBtn.addEventListener('click', function() {
+    var qipuIds = getSelectedQipuIds();
+    if (qipuIds.length === 0) return;
+    pendingAction = 'sendLocal';
+    exportSelectedBtn.disabled = true;
+    sendLocalBtn.disabled = true;
+    statusEl.textContent = '正在导出并发送...';
     sendToTab({ action: 'exportSelected', qipuIds: qipuIds });
   });
 
@@ -170,20 +214,28 @@
     if (message.type === 'QQCHESS_EXPORT_DONE') {
       var d = message.payload;
       if (d.pgn && d.filename) {
-        triggerDownload(d.pgn, d.filename);
-      }
-      if (d.count === 0) {
-        statusEl.textContent = d.message || '没有找到对局';
-      } else {
-        var detail = '已导出 ' + d.count + ' 局';
-        if (d.cached > 0) {
-          detail += '（其中 ' + d.cached + ' 局来自缓存）';
+        if (pendingAction === 'sendLocal') {
+          sendToLocalService(d.pgn, d.count, d.cached);
+        } else {
+          triggerDownload(d.pgn, d.filename);
+          if (d.count === 0) {
+            statusEl.textContent = d.message || '没有找到对局';
+          } else {
+            var detail = '已导出 ' + d.count + ' 局';
+            if (d.cached > 0) {
+              detail += '（其中 ' + d.cached + ' 局来自缓存）';
+            }
+            statusEl.textContent = detail;
+          }
         }
-        statusEl.textContent = detail;
+      } else if (d.count === 0) {
+        statusEl.textContent = d.message || '没有找到对局';
       }
       exportBtn.disabled = false;
       selectExportBtn.disabled = false;
       exportSelectedBtn.disabled = false;
+      sendLocalBtn.disabled = false;
+      pendingAction = 'download';
     }
 
     if (message.type === 'QQCHESS_EXPORT_ERROR') {

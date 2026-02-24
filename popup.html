@@ -118,23 +118,44 @@ h1 {
   border-top: 1px solid #ddd;
   background: #f5f5f5;
 }
-#exportSelectedBtn {
-  display: block;
-  width: 100%;
+#exportSelectedBtn, #sendLocalBtn {
+  flex: 1;
   padding: 10px;
   font-size: 14px;
-  background: #27ae60;
   color: #fff;
   border: none;
   border-radius: 4px;
   cursor: pointer;
 }
+#exportSelectedBtn {
+  background: #27ae60;
+}
 #exportSelectedBtn:hover {
   background: #219a52;
 }
-#exportSelectedBtn:disabled {
+#sendLocalBtn {
+  background: #8e44ad;
+}
+#sendLocalBtn:hover {
+  background: #7d3c98;
+}
+#exportSelectedBtn:disabled, #sendLocalBtn:disabled {
   background: #bbb;
   cursor: not-allowed;
+}
+#portInput {
+  width: 3.5em;
+  border: none;
+  border-bottom: 1px solid rgba(255,255,255,0.6);
+  background: transparent;
+  color: #fff;
+  font-size: inherit;
+  text-align: center;
+  padding: 0;
+  outline: none;
+}
+#sendLocalBtn:disabled #portInput {
+  color: #fff;
 }
 </style>
 </head>
@@ -152,7 +173,10 @@ h1 {
     </div>
     <div id="gameListContainer"></div>
     <div class="list-footer">
-      <button id="exportSelectedBtn" disabled>导出选中 (0)</button>
+      <div class="btn-row">
+        <button id="exportSelectedBtn" disabled>导出选中 (0)</button>
+        <button id="sendLocalBtn" disabled>发送到 localhost:<input id="portInput" type="text" value="9213" onclick="event.stopPropagation()"></button>
+      </div>
     </div>
   </div>
   <script src="popup.js"></script>
