@@ -257,16 +257,12 @@
     window.postMessage({ type: 'QQCHESS_GAME_LIST', payload: { games: games } }, '*');
   }
 
-  var DRAW_TYPES = {3: true, 5: true, 6: true, 12: true, 14: true};
-
   function parseResult(sData) {
     if (!sData) return '未知';
     var r = sData.result;
     if (r === '1-0') return '红胜';
     if (r === '0-1') return '黑胜';
-    if (r === '1/2-1/2') return '和棋';
-    if (DRAW_TYPES[sData.resultType]) return '和棋';
-    return '未知';
+    return '和棋';
   }
 
   function getPlayerNames(sData) {

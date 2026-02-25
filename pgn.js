@@ -2,7 +2,6 @@
   if (window.QQChessPGN) return;
 
   var COLS = 'abcdefghi';
-  var DRAW_TYPES = {3: true, 5: true, 6: true, 12: true, 14: true};
   var DEFAULT_FEN = 'rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w';
 
   function movelistToICCS(movelist) {
@@ -21,13 +20,8 @@
   }
 
   function mapResult(resultType, resultStr) {
-    if (resultStr === '1-0' || resultStr === '0-1' || resultStr === '1/2-1/2') {
-      return resultStr;
-    }
-    if (DRAW_TYPES[resultType]) {
-      return '1/2-1/2';
-    }
-    return '*';
+    if (resultStr === '1-0' || resultStr === '0-1') return resultStr;
+    return '1/2-1/2';
   }
 
   function formatDate(timestamp) {
