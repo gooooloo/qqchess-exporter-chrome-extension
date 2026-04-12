@@ -6,6 +6,44 @@
   var LIST_SIZE = 20;
   var lastLoadedGames = [];
 
+  // 自动检测混淆后的属性名，避免每次天天象棋前端更新都需要手动修改
+  var _fetchMethodName = null;
+  var _listArrayName = null;
+
+  function detectFetchMethod(qipuModel) {
+    if (_fetchMethodName) return _fetchMethodName;
+    var proto = Object.getPrototypeOf(qipuModel);
+    var names = Object.getOwnPropertyNames(proto);
+    for (var i = 0; i < names.length; i++) {
+      var k = names[i];
+      if (typeof qipuModel[k] === 'function') {
+        try {
+          if (qipuModel[k].toString().indexOf('TRequestGetDataList') !== -1) {
+            _fetchMethodName = k;
+            console.log('[QQChess Exporter] 检测到请求方法: ' + k);
+            return k;
+          }
+        } catch (e) {}
+      }
+    }
+    return null;
+  }
+
+  function detectListArray(qipuModel) {
+    if (_listArrayName) return _listArrayName;
+    var keys = Object.keys(qipuModel);
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      if (Array.isArray(qipuModel[k]) && qipuModel[k].length > 0 &&
+          qipuModel[k][0] && typeof qipuModel[k][0].qipuId !== 'undefined') {
+        _listArrayName = k;
+        console.log('[QQChess Exporter] 检测到列表数组: ' + k);
+        return k;
+      }
+    }
+    return null;
+  }
+
   window.addEventListener('message', function(event) {
     if (event.data && event.data.type === 'QQCHESS_EXPORT_REQUEST') {
       exportGames();
@@ -79,21 +117,46 @@
   }
 
 
-  // 用 Xj 请求一页，等 2 秒让 Wfb 填满，然后读取
   function fetchPage(qipuModel, pageNum) {
+    var methodName = detectFetchMethod(qipuModel);
+    if (!methodName) {
+      console.error('[QQChess Exporter] 无法检测到请求对局列表的方法，天天象棋可能又更新了');
+      return Promise.resolve([]);
+    }
+
     return new Promise(function(resolve) {
-      qipuModel.Wfb = [];
-      qipuModel.Xj(13, pageNum, PAGE_SIZE, 0);
-      // 等 2 秒让服务器返回完整数据
-      setTimeout(function() {
-        var results = [];
-        if (qipuModel.Wfb) {
-          for (var i = 0; i < qipuModel.Wfb.length; i++) {
-            results.push(qipuModel.Wfb[i]);
+      if (_listArrayName) {
+        // 已检测到数组属性名，直接使用
+        qipuModel[_listArrayName] = [];
+        qipuModel[methodName](13, pageNum, PAGE_SIZE, 0);
+        setTimeout(function() {
+          resolve(qipuModel[_listArrayName] ? qipuModel[_listArrayName].slice() : []);
+        }, 2000);
+      } else {
+        // 首次调用：先记录所有数组长度，请求后检测哪个数组被填充
+        var arrayKeys = Object.keys(qipuModel).filter(function(k) {
+          return Array.isArray(qipuModel[k]);
+        });
+        var before = {};
+        arrayKeys.forEach(function(k) { before[k] = qipuModel[k].length; });
+
+        qipuModel[methodName](13, pageNum, PAGE_SIZE, 0);
+
+        setTimeout(function() {
+          // 找到被填充的数组（长度增长且元素含 qipuId）
+          for (var i = 0; i < arrayKeys.length; i++) {
+            var k = arrayKeys[i];
+            if (qipuModel[k].length > before[k] &&
+                qipuModel[k][0] && typeof qipuModel[k][0].qipuId !== 'undefined') {
+              _listArrayName = k;
+              console.log('[QQChess Exporter] 检测到列表数组: ' + k);
+              resolve(qipuModel[k].slice());
+              return;
+            }
           }
-        }
-        resolve(results);
-      }, 2000);
+          resolve([]);
+        }, 2000);
+      }
     });
   }
 
@@ -345,18 +408,10 @@
               sData = collectData.sData;
             }
 
-            var extPlayers = [];
-            if (game.$0a && game.$0a.Md && game.$0a.Md.val) {
-              var vals = game.$0a.Md.val;
-              for (var j = 0; j < vals.length; j++) {
-                extPlayers.push(vals[j]);
-              }
-            }
-
             var metadata = {
               createTime: game.createTime,
               event: '',
-              extPlayers: extPlayers
+              extPlayers: []
             };
 
             cacheSet(game.qipuId, { sData: sData, metadata: metadata });

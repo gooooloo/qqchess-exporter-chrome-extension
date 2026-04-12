@@ -69,33 +69,33 @@ content.js 运行在页面的 MAIN world 中，直接访问天天象棋 Cocos2d-
 
 关键依赖点（按脆弱程度排序）：
 
-| 依赖项 | 用途 | 稳定性 |
-|--------|------|--------|
-| `fdk.getModel("QipuModel")` | 获取棋谱数据模型 | 较稳定（未混淆） |
-| `qipuModel.requestGetQipuInfo(...)` | 请求单局详细数据 | 较稳定（未混淆） |
-| `qipuModel.ba(eventName, data)` | 事件回调，用于拦截返回数据 | 混淆名，可能变化 |
-| `qipuModel.Xj(13, pageNum, pageSize, 0)` | 请求对局列表（分页） | 混淆名，可能变化 |
-| `qipuModel.Wfb` | 存储返回的对局列表数组 | 混淆名，可能变化 |
-| 回调数据路径 `data.param.collectDataInfo` | 获取单局棋谱数据 | 可能变化 |
-| `collectData.sData` 中的 JSON 结构 | 棋谱着法、玩家信息、结果 | 较稳定 |
+| 依赖项 | 用途 | 稳定性 | 自动检测 |
+|--------|------|--------|----------|
+| `fdk.getModel("QipuModel")` | 获取棋谱数据模型 | 较稳定（未混淆） | — |
+| `qipuModel.requestGetQipuInfo(...)` | 请求单局详细数据 | 较稳定（未混淆） | — |
+| `qipuModel.ba(eventName, data)` | 事件回调，用于拦截返回数据 | 混淆名，可能变化 | 暂未自动检测 |
+| 请求对局列表的方法 | 分页获取对局列表 | 混淆名，每次更新都会变 | ✅ 通过函数源码匹配 `TRequestGetDataList` |
+| 存储对局列表的数组 | 请求后存储返回的对局 | 混淆名，每次更新都会变 | ✅ 首次请求后检测含 `qipuId` 的数组 |
+| 回调数据路径 `data.param.collectDataInfo` | 获取单局棋谱数据 | 可能变化 | — |
+| `collectData.sData` 中的 JSON 结构 | 棋谱着法、玩家信息、结果 | 较稳定 | — |
 
-### 修复方法
+### 排查方法
 
-当插件因网站更新失效时，用以下步骤排查：
+大部分混淆属性名已经实现了运行时自动检测（见 content.js 中的 `detectFetchMethod` 和 `detectListArray`），天天象棋前端更新通常不需要手动修复。
+
+如果自动检测也失效了（Console 中出现 `[QQChess Exporter] 无法检测到...` 的错误），按以下步骤排查：
 
 1. 打开天天象棋网页，F12 进入 DevTools Console
 2. 检查模型是否存在：`fdk.getModel("QipuModel")`
-3. 检查当前混淆属性名：
+3. 检查自动检测的特征是否仍然有效：
    ```js
    var qm = fdk.getModel("QipuModel");
-   // 找请求对局列表的方法（参数签名：iDataType, iPageFlag, iReqNum, iDirID）
-   // 在 prototype 方法中搜索包含 "TRequestGetDataList" 的函数
+   // 请求方法：通过函数源码搜索 "TRequestGetDataList"
    Object.getOwnPropertyNames(Object.getPrototypeOf(qm))
      .filter(k => typeof qm[k] === 'function' && qm[k].toString().includes('TRequestGetDataList'));
-   // 找存储对局列表的数组（调用上述方法后 2 秒检查哪个数组被填充）
-   Object.keys(qm).filter(k => Array.isArray(qm[k]) && qm[k].length > 0);
+   // 如果返回空数组，说明特征字符串也变了，需要更新 detectFetchMethod 的匹配逻辑
    ```
-4. 将 content.js 中的旧属性名替换为新的
+4. 更新 content.js 中 `detectFetchMethod` / `detectListArray` 的匹配逻辑
 
 ### 历次属性名变更记录
 
