@@ -63,6 +63,46 @@ popup.js  →  bridge.js (ISOLATED world, chrome.* APIs)
 
 扩展通过访问游戏的 Cocos2d-JS 运行时读取对局记录，将着法转换为 ICCS 记谱法，输出标准 PGN 格式。
 
+### 依赖的内部 API
+
+content.js 运行在页面的 MAIN world 中，直接访问天天象棋 Cocos2d-JS 框架的内部对象。这些对象的属性名是混淆/压缩后的，**每次天天象棋前端更新都可能导致属性名变化，从而使插件失效**。
+
+关键依赖点（按脆弱程度排序）：
+
+| 依赖项 | 用途 | 稳定性 |
+|--------|------|--------|
+| `fdk.getModel("QipuModel")` | 获取棋谱数据模型 | 较稳定（未混淆） |
+| `qipuModel.requestGetQipuInfo(...)` | 请求单局详细数据 | 较稳定（未混淆） |
+| `qipuModel.ba(eventName, data)` | 事件回调，用于拦截返回数据 | 混淆名，可能变化 |
+| `qipuModel.Xj(13, pageNum, pageSize, 0)` | 请求对局列表（分页） | 混淆名，可能变化 |
+| `qipuModel.Wfb` | 存储返回的对局列表数组 | 混淆名，可能变化 |
+| 回调数据路径 `data.param.collectDataInfo` | 获取单局棋谱数据 | 可能变化 |
+| `collectData.sData` 中的 JSON 结构 | 棋谱着法、玩家信息、结果 | 较稳定 |
+
+### 修复方法
+
+当插件因网站更新失效时，用以下步骤排查：
+
+1. 打开天天象棋网页，F12 进入 DevTools Console
+2. 检查模型是否存在：`fdk.getModel("QipuModel")`
+3. 检查当前混淆属性名：
+   ```js
+   var qm = fdk.getModel("QipuModel");
+   // 找请求对局列表的方法（参数签名：iDataType, iPageFlag, iReqNum, iDirID）
+   // 在 prototype 方法中搜索包含 "TRequestGetDataList" 的函数
+   Object.getOwnPropertyNames(Object.getPrototypeOf(qm))
+     .filter(k => typeof qm[k] === 'function' && qm[k].toString().includes('TRequestGetDataList'));
+   // 找存储对局列表的数组（调用上述方法后 2 秒检查哪个数组被填充）
+   Object.keys(qm).filter(k => Array.isArray(qm[k]) && qm[k].length > 0);
+   ```
+4. 将 content.js 中的旧属性名替换为新的
+
+### 历次属性名变更记录
+
+| 日期 | 变更 |
+|------|------|
+| 2026-04-12 | `Sj` → `Xj`，`Beb` → `Wfb`，`$0a.Md.val` 路径已移除 |
+
 ## 隐私政策
 
 详见 [PRIVACY.md](PRIVACY.md)
