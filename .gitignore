@@ -3,3 +3,5 @@ node_modules/
 *.zip
 .claude/
 safari-extension/
+.playwright-mcp/
+qqchess-state.png
