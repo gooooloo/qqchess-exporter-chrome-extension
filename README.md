@@ -16,20 +16,21 @@
 4. 点击**加载已解压的扩展程序**，选择本文件夹
 5. 将扩展图标固定到工具栏
 
-### Safari (macOS)
+### Safari (macOS 26 / Safari 26 及以上)
 
-1. 安装 Xcode（从 App Store 或 [developer.apple.com](https://developer.apple.com/xcode/)）
-2. 克隆本仓库，在终端运行：
-   ```bash
-   xcrun safari-web-extension-converter /path/to/this/repo \
-     --project-location ./safari-extension \
-     --app-name "QQ Chess PGN Exporter" \
-     --bundle-identifier com.gooooloo.qqchess-pgn-exporter
-   ```
-3. 在 Xcode 中编译运行生成的项目
-4. Safari → 设置 → 高级 → 勾选**在菜单栏中显示"开发"菜单**
-5. 菜单栏 → 开发 → 勾选**允许未签名的扩展**
-6. Safari → 设置 → 扩展 → 启用 **QQ Chess PGN Exporter**
+Safari 26 起支持像 Chrome 一样直接加载未打包的扩展，**不再需要 Xcode**。
+
+1. 克隆本仓库到本地
+2. Safari → 设置 → 高级 → 勾选**在菜单栏中显示"开发"菜单**
+3. 菜单栏 → 开发 → 开发者设置 → 勾选**允许未签名的扩展**
+4. 在开发者设置同一页，点 **添加临时扩展...**，选本仓库**根目录**（包含 `manifest.json` 的目录）
+5. Safari → 设置 → 扩展 → 启用 **QQ Chess PGN Exporter**
+
+注意：
+
+- "添加临时扩展"加载的扩展**每次重启 Safari 会消失**，需重新添加。这是 Apple 设计。
+- "允许未签名的扩展"开关 Safari 每次重启也会重置，需重勾。
+- 之后升级只需 `git pull`，Safari 重新启动后再走第 3-4 步即可。
 
 ## 使用方法
 
@@ -51,7 +52,7 @@
 - 导出前需先登录
 - 已导出的对局会缓存在本地，加快后续导出速度
 - Chrome 重启时可能会提示"开发者模式扩展程序"警告，关闭即可；也可改用 Edge 避免此提示
-- Safari 版本每次重启 Safari 后需重新勾选"允许未签名的扩展"
+- Safari 版本每次重启 Safari 后需重新勾选"允许未签名的扩展"并重新添加临时扩展
 
 ## 工作原理
 
@@ -74,8 +75,8 @@ content.js 运行在页面的 MAIN world 中，直接访问天天象棋 Cocos2d-
 | `fdk.getModel("QipuModel")` | 获取棋谱数据模型 | 较稳定（未混淆） |
 | `qipuModel.requestGetQipuInfo(...)` | 请求单局详细数据 | 较稳定（未混淆） |
 | `qipuModel.ba(eventName, data)` | 事件回调，用于拦截返回数据 | 混淆名，可能变化 |
-| `qipuModel.Xj(13, pageNum, pageSize, 0)` | 请求对局列表（分页） | 混淆名，可能变化 |
-| `qipuModel.Wfb` | 存储返回的对局列表数组 | 混淆名，可能变化 |
+| `qipuModel.Yj(13, pageNum, pageSize, 0)` | 请求对局列表（分页） | 混淆名，可能变化 |
+| `qipuModel.qgb` | 存储返回的对局列表数组 | 混淆名，可能变化 |
 | 回调数据路径 `data.param.collectDataInfo` | 获取单局棋谱数据 | 可能变化 |
 | `collectData.sData` 中的 JSON 结构 | 棋谱着法、玩家信息、结果 | 较稳定 |
 
@@ -97,11 +98,14 @@ content.js 运行在页面的 MAIN world 中，直接访问天天象棋 Cocos2d-
    ```
 4. 将 content.js 中的旧属性名替换为新的
 
+详细的调试流程见 [DEBUGGING.md](DEBUGGING.md)。
+
 ### 历次属性名变更记录
 
 | 日期 | 变更 |
 |------|------|
 | 2026-04-12 | `Sj` → `Xj`，`Beb` → `Wfb`，`$0a.Md.val` 路径已移除 |
+| 2026-05-17 | `Xj` → `Yj`，`Wfb` → `qgb` |
 
 ## 隐私政策
 
