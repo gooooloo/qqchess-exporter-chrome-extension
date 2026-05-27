@@ -79,17 +79,17 @@
   }
 
 
-  // 用 Yj 请求一页，等 2 秒让 qgb 填满，然后读取
+  // 用 fk 请求一页，等 2 秒让 skb 填满，然后读取
   function fetchPage(qipuModel, pageNum) {
     return new Promise(function(resolve) {
-      qipuModel.qgb = [];
-      qipuModel.Yj(13, pageNum, PAGE_SIZE, 0);
+      qipuModel.skb = [];
+      qipuModel.fk(13, pageNum, PAGE_SIZE, 0);
       // 等 2 秒让服务器返回完整数据
       setTimeout(function() {
         var results = [];
-        if (qipuModel.qgb) {
-          for (var i = 0; i < qipuModel.qgb.length; i++) {
-            results.push(qipuModel.qgb[i]);
+        if (qipuModel.skb) {
+          for (var i = 0; i < qipuModel.skb.length; i++) {
+            results.push(qipuModel.skb[i]);
           }
         }
         resolve(results);
