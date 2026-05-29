@@ -79,20 +79,28 @@
   }
 
 
-  // 用 fk 请求一页，等 2 秒让 skb 填满，然后读取
+  // 用 fk 请求一页，等 2 秒后动态找出被填充的列表数组（包含 qipuId 字段）
+  // 数组名在不同 bundle 版本里会变（历史上 Beb→Wfb→qgb→skb/tkb），所以不硬编码
   function fetchPage(qipuModel, pageNum) {
     return new Promise(function(resolve) {
-      qipuModel.skb = [];
+      var before = {};
+      Object.keys(qipuModel).forEach(function(k) {
+        if (Array.isArray(qipuModel[k])) before[k] = qipuModel[k].length;
+      });
       qipuModel.fk(13, pageNum, PAGE_SIZE, 0);
-      // 等 2 秒让服务器返回完整数据
       setTimeout(function() {
-        var results = [];
-        if (qipuModel.skb) {
-          for (var i = 0; i < qipuModel.skb.length; i++) {
-            results.push(qipuModel.skb[i]);
+        var keys = Object.keys(qipuModel);
+        for (var i = 0; i < keys.length; i++) {
+          var k = keys[i];
+          var arr = qipuModel[k];
+          if (!Array.isArray(arr) || arr.length === 0) continue;
+          if (arr.length === (before[k] || 0)) continue;
+          if (arr[0] && typeof arr[0].qipuId !== 'undefined') {
+            resolve(arr.slice());
+            return;
           }
         }
-        resolve(results);
+        resolve([]);
       }, 2000);
     });
   }

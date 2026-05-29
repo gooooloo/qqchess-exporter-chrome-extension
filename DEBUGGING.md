@@ -7,7 +7,7 @@
 | 角色 | 历史名字 |
 |---|---|
 | 请求对局列表的方法 | `Sj` → `Xj` → `Yj` → `fk` |
-| 列表被填充的数组 | `Beb` → `Wfb` → `qgb` → `skb` |
+| 列表被填充的数组 | `Beb` → `Wfb` → `qgb` → `skb`/`tkb`（v1.3.4 起改为运行时检测） |
 | 详情回调（被 hook 用） | `ba`（暂未变） |
 | 详情请求方法 | `requestGetQipuInfo`（非混淆名，稳定） |
 
@@ -219,11 +219,12 @@ pgrep -fl "Google Chrome.app/Contents/MacOS/Google Chrome"
 
 确保的方法：在 Claude Code 里 `/mcp` 把 `plugin:playwright:playwright` 断开，并 kill 残留的 chromium 进程。
 
-## 为什么不做 auto-detect
+## auto-detect 的历史
 
-历史上 commit `96ead5a` 尝试过运行时自动检测 `_fetchMethodName` / `_listArrayName`，但 commit `ac48a5d` 又 revert 掉了（没写原因，可能不够稳）。当前选择是**继续硬编码 + 出问题时按本文档手工修一次**。
+历史上 commit `96ead5a` 尝试过运行时自动检测 `_fetchMethodName` / `_listArrayName`，但 commit `ac48a5d` 又 revert 掉了（没写原因，可能不够稳）。
 
-如果哪天想重新尝试 auto-detect，原则上应该：
-- 用 `TRequestGetDataList` + `requestData(85131, ...)` 双重特征匹配请求方法（光匹配 `TRequestGetDataList` 有两个候选）
-- 用"调用后被填充 + 元素含 qipuId" 检测列表数组
-- 一定保留硬编码作为 fallback
+v1.3.4 起重新引入了**部分 auto-detect**：列表数组名改成运行时检测（调用 `fk` 后找含 `qipuId` 字段且 length 变化的数组）。原因是 2026-05-30 发现 Tencent CDN 同一时间向不同设备分发了两版 bundle（`skb` vs `tkb`），任何单一硬编码都会让一拨用户挂掉。
+
+请求方法名 `fk` 暂时保留硬编码——两个 bundle 都一致。如果它将来也分裂，按以下原则做 auto-detect：
+- 用 `TRequestGetDataList` + `requestData(85131, ...)` 双重特征匹配（光匹配 `TRequestGetDataList` 有两个候选）
+- 保留当前硬编码作为 fallback
