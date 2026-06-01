@@ -79,28 +79,39 @@
   }
 
 
-  // 用 fk 请求一页，等 2 秒后动态找出被填充的列表数组（包含 qipuId 字段）
-  // 数组名在不同 bundle 版本里会变（历史上 Beb→Wfb→qgb→skb/tkb），所以不硬编码
+  // 列表数组名在不同 bundle 版本里会变（历史上 Beb→Wfb→qgb→skb/tkb），运行时识别并缓存。
+  // 识别策略：取 qipuModel 上"长度最大、首项含 qipuId 字段"的数组。
+  var _listArrayName = null;
+
+  function detectListArrayName(qipuModel) {
+    var keys = Object.keys(qipuModel);
+    var best = null;
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      var arr = qipuModel[k];
+      if (!Array.isArray(arr) || arr.length === 0) continue;
+      if (!arr[0] || typeof arr[0].qipuId === 'undefined') continue;
+      if (!best || arr.length > qipuModel[best].length) best = k;
+    }
+    return best;
+  }
+
+  // 用 fk 请求一页，清空列表数组（避免 append 模式造成数据混淆），等 2 秒后读取
   function fetchPage(qipuModel, pageNum) {
     return new Promise(function(resolve) {
-      var before = {};
-      Object.keys(qipuModel).forEach(function(k) {
-        if (Array.isArray(qipuModel[k])) before[k] = qipuModel[k].length;
-      });
+      if (!_listArrayName || !Array.isArray(qipuModel[_listArrayName])) {
+        _listArrayName = detectListArrayName(qipuModel);
+      }
+      if (_listArrayName) {
+        qipuModel[_listArrayName] = [];
+      }
       qipuModel.fk(13, pageNum, PAGE_SIZE, 0);
       setTimeout(function() {
-        var keys = Object.keys(qipuModel);
-        for (var i = 0; i < keys.length; i++) {
-          var k = keys[i];
-          var arr = qipuModel[k];
-          if (!Array.isArray(arr) || arr.length === 0) continue;
-          if (arr.length === (before[k] || 0)) continue;
-          if (arr[0] && typeof arr[0].qipuId !== 'undefined') {
-            resolve(arr.slice());
-            return;
-          }
+        if (!_listArrayName) {
+          _listArrayName = detectListArrayName(qipuModel);
         }
-        resolve([]);
+        var arr = _listArrayName ? qipuModel[_listArrayName] : null;
+        resolve(Array.isArray(arr) ? arr.slice() : []);
       }, 2000);
     });
   }
