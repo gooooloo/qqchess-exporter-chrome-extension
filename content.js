@@ -79,36 +79,77 @@
   }
 
 
-  // 列表数组名在不同 bundle 版本里会变（历史上 Beb→Wfb→qgb→skb/tkb），运行时识别并缓存。
-  // 识别策略：取 qipuModel 上"长度最大、首项含 qipuId 字段"的数组。
+  // 请求方法名和列表数组名在不同 bundle 版本里会变（历史: Sj→Xj→Yj→fk; Beb→Wfb→qgb→skb/tkb），
+  // 全部运行时识别并缓存。
   var _listArrayName = null;
+  var _fetchMethodName = null;
 
+  // 识别策略: prototype 上签名匹配 TRequestGetDataList + requestData(85131, ...) 的方法
+  function detectFetchMethod(qipuModel) {
+    try {
+      var proto = Object.getPrototypeOf(qipuModel);
+      var funcs = Object.getOwnPropertyNames(proto).filter(function(k) {
+        return typeof qipuModel[k] === 'function';
+      });
+      for (var i = 0; i < funcs.length; i++) {
+        var k = funcs[i];
+        try {
+          var s = qipuModel[k].toString();
+          if (s.indexOf('TRequestGetDataList') !== -1 && s.indexOf('85131') !== -1) {
+            return k;
+          }
+        } catch (e) {}
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  // 识别策略: 取首项含 qipuId + createTime 双字段、长度最大的数组，排除 _underscored 命名字段
   function detectListArrayName(qipuModel) {
     var keys = Object.keys(qipuModel);
     var best = null;
     for (var i = 0; i < keys.length; i++) {
       var k = keys[i];
+      if (k.charAt(0) === '_') continue;
       var arr = qipuModel[k];
       if (!Array.isArray(arr) || arr.length === 0) continue;
-      if (!arr[0] || typeof arr[0].qipuId === 'undefined') continue;
+      var item = arr[0];
+      if (!item || typeof item.qipuId === 'undefined') continue;
+      if (typeof item.createTime === 'undefined') continue;
       if (!best || arr.length > qipuModel[best].length) best = k;
     }
     return best;
   }
 
-  // 用 fk 请求一页，清空列表数组（避免 append 模式造成数据混淆），等 2 秒后读取
   function fetchPage(qipuModel, pageNum) {
-    return new Promise(function(resolve) {
+    return new Promise(function(resolve, reject) {
+      if (!_fetchMethodName || typeof qipuModel[_fetchMethodName] !== 'function') {
+        _fetchMethodName = detectFetchMethod(qipuModel);
+      }
+      if (!_fetchMethodName) {
+        reject(new Error('找不到对局列表请求方法（天天象棋前端可能升级了，请检查 DEBUGGING.md）'));
+        return;
+      }
+
       if (!_listArrayName || !Array.isArray(qipuModel[_listArrayName])) {
         _listArrayName = detectListArrayName(qipuModel);
       }
       if (_listArrayName) {
         qipuModel[_listArrayName] = [];
       }
-      qipuModel.fk(13, pageNum, PAGE_SIZE, 0);
+
+      try {
+        qipuModel[_fetchMethodName](13, pageNum, PAGE_SIZE, 0);
+      } catch (e) {
+        reject(new Error('请求方法 ' + _fetchMethodName + ' 调用失败: ' + e.message));
+        return;
+      }
+
       setTimeout(function() {
-        if (!_listArrayName) {
-          _listArrayName = detectListArrayName(qipuModel);
+        // 如果缓存的数组名失效或为空，重新检测一次
+        if (!_listArrayName || !Array.isArray(qipuModel[_listArrayName]) || qipuModel[_listArrayName].length === 0) {
+          var refreshed = detectListArrayName(qipuModel);
+          if (refreshed) _listArrayName = refreshed;
         }
         var arr = _listArrayName ? qipuModel[_listArrayName] : null;
         resolve(Array.isArray(arr) ? arr.slice() : []);
@@ -157,6 +198,8 @@
           pageNum++;
           loadNextPage();
         }
+      }).catch(function(err) {
+        sendError(err && err.message ? err.message : '加载对局列表失败');
       });
     }
 
@@ -411,6 +454,8 @@
       for (var i = 0; i < initialBatch; i++) {
         processListGame(i);
       }
+    }).catch(function(err) {
+      sendError(err && err.message ? err.message : '加载对局列表失败');
     });
   }
 
