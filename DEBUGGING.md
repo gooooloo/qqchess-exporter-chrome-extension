@@ -223,8 +223,9 @@ pgrep -fl "Google Chrome.app/Contents/MacOS/Google Chrome"
 
 历史上 commit `96ead5a` 尝试过运行时自动检测 `_fetchMethodName` / `_listArrayName`，但 commit `ac48a5d` 又 revert 掉了（没写原因，可能不够稳）。
 
-v1.3.4 起重新引入了**部分 auto-detect**：列表数组名改成运行时检测（调用 `fk` 后找含 `qipuId` 字段且 length 变化的数组）。原因是 2026-05-30 发现 Tencent CDN 同一时间向不同设备分发了两版 bundle（`skb` vs `tkb`），任何单一硬编码都会让一拨用户挂掉。
+后来又分阶段重新引入：
+- **v1.3.4 (2026-05-30)**：列表数组名改成运行时检测（调用请求方法后找含 `qipuId` 的数组）。起因是 Tencent CDN 同一时间向不同设备分发了两版 bundle（`skb` vs `tkb`），任何单一硬编码都会让一拨用户挂掉。
+- **v1.3.5 (2026-05-30)**：缓存识别结果，每次调用前清空数组，处理"页面预填充"导致 length 不变的问题。
+- **v1.3.6 (2026-06-20)**：请求方法名也改成运行时检测（按签名 `TRequestGetDataList` + `requestData(85131, ...)` 匹配），列表数组检测加严（要求 `qipuId` + `createTime` 双字段，排除 `_underscored` 命名属性），并补上错误传回 popup 的链路。
 
-请求方法名 `fk` 暂时保留硬编码——两个 bundle 都一致。如果它将来也分裂，按以下原则做 auto-detect：
-- 用 `TRequestGetDataList` + `requestData(85131, ...)` 双重特征匹配（光匹配 `TRequestGetDataList` 有两个候选）
-- 保留当前硬编码作为 fallback
+目前还硬编码的只剩 `ba`（详情回调）和 `requestGetQipuInfo`（详情请求方法）。后者是非混淆名，稳定；前者历史上没变过，万一变了按"找签名含 `Bq.ba(ha,ua,sa)` 且参数为 4 个的方法"识别。
