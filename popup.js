@@ -200,13 +200,16 @@
 
     if (message.type === 'QQCHESS_GAME_LIST') {
       var games = message.payload.games;
-      statusEl.textContent = '已加载 ' + games.length + ' 局';
+      var failed = message.payload.failed || 0;
       exportBtn.disabled = false;
       selectExportBtn.disabled = false;
       if (games.length === 0) {
-        statusEl.textContent = '没有找到对局';
+        statusEl.textContent = failed > 0 ?
+          ('加载失败：' + failed + ' 局详情均未拉到（详见页面 console）') : '没有找到对局';
         return;
       }
+      statusEl.textContent = '已加载 ' + games.length + ' 局' +
+        (failed > 0 ? ('，另有 ' + failed + ' 局加载失败') : '');
       gameListPanel.style.display = 'block';
       renderGameList(games);
     }
@@ -224,6 +227,9 @@
             var detail = '已导出 ' + d.count + ' 局';
             if (d.cached > 0) {
               detail += '（其中 ' + d.cached + ' 局来自缓存）';
+            }
+            if (d.failed > 0) {
+              detail += '，' + d.failed + ' 局失败';
             }
             statusEl.textContent = detail;
           }

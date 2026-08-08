@@ -6,9 +6,9 @@
 
 | 角色 | 历史名字 |
 |---|---|
-| 请求对局列表的方法 | `Sj` → `Xj` → `Yj` → `fk` |
-| 列表被填充的数组 | `Beb` → `Wfb` → `qgb` → `skb`/`tkb`（v1.3.4 起改为运行时检测） |
-| 详情回调（被 hook 用） | `ba`（暂未变） |
+| 请求对局列表的方法 | `Sj` → `Xj` → `Yj` → `fk` → `Bj`（v1.3.6 起运行时检测） |
+| 列表被填充的数组 | `Beb` → `Wfb` → `qgb` → `skb`/`tkb`（v1.3.4 起运行时检测） |
+| 详情回调（被 hook 用） | `ba` → `sa`（v1.3.7 起运行时检测） |
 | 详情请求方法 | `requestGetQipuInfo`（非混淆名，稳定） |
 
 天天象棋每次重打包前端，混淆器就会重新分配 `Yj` / `qgb` 这种短名字。扩展跑不通基本都是这个原因。修复就是定位**当前这一版**对应的新名字，替换 `content.js` 里的硬编码。
@@ -155,7 +155,7 @@ qipuModel.<OLD_FETCH>(13, ...);    // → 新方法名
 
 以及注释里 "用 X 请求一页，等 2 秒让 Y 填满"。
 
-如果 `ba` 也变了（极少见），需要找它的替代：原 `ba` 的签名是 `function(ha,ua,sa,qa){...this.Bq.ba(ha,ua,sa)}`。找 `Bq.ba` 调用 + 4 个参数的方法。
+详情回调（历史 `ba`，现 `sa`）v1.3.7 起已运行时检测，谓词：**4 个形参、函数体内含 `this.<X>.<自身名>(参1,参2,参3)` 三参转发**（如 `function(db,sx,cx,sh){...this.Fp.sa(db,sx,cx)}`），找不到时按 `sa`→`ba` 兜底。若再失效，先用下文"无浏览器快速诊断法"确认新签名。
 
 更新 `manifest.json` 的 `version`。
 
@@ -227,5 +227,17 @@ pgrep -fl "Google Chrome.app/Contents/MacOS/Google Chrome"
 - **v1.3.4 (2026-05-30)**：列表数组名改成运行时检测（调用请求方法后找含 `qipuId` 的数组）。起因是 Tencent CDN 同一时间向不同设备分发了两版 bundle（`skb` vs `tkb`），任何单一硬编码都会让一拨用户挂掉。
 - **v1.3.5 (2026-05-30)**：缓存识别结果，每次调用前清空数组，处理"页面预填充"导致 length 不变的问题。
 - **v1.3.6 (2026-06-20)**：请求方法名也改成运行时检测（按签名 `TRequestGetDataList` + `requestData(85131, ...)` 匹配），列表数组检测加严（要求 `qipuId` + `createTime` 双字段，排除 `_underscored` 命名属性），并补上错误传回 popup 的链路。
+- **v1.3.7 (2026-08-08)**：详情回调 `ba`→`sa`。症状：所有未缓存对局的详情 15 秒超时后被静默丢弃，用户看到"最近 N 局加载不出来"（老对局都命中扩展 localStorage 缓存所以正常）。回调名改为运行时检测（谓词见上文；当日 bundle 全量扫描该谓词只命中 `sa` 和一个不在 Model 原型链上的 UI 方法 `hQ`，无歧义）。同时把"每次 fetch 各自 monkey-patch + restore"改成**常驻共享 hook 按 lDataID 分发**——旧写法并发时先返回的 restore 会把后装的 hook 挤掉导致对方必然超时。失败局数现在会传回 popup 显示，不再静默丢弃。另注意：新版 `requestGetQipuInfo` 命中页面本地棋谱缓存（`QipuFileSysModel.showQipuWithCacheFileName`）时会**同步**走 `khb`→分发方法而不发网络请求，因此必须先注册 resolver 再调用它（现有代码已如此）。
 
-目前还硬编码的只剩 `ba`（详情回调）和 `requestGetQipuInfo`（详情请求方法）。后者是非混淆名，稳定；前者历史上没变过，万一变了按"找签名含 `Bq.ba(ha,ua,sa)` 且参数为 4 个的方法"识别。
+目前还硬编码的只剩 `requestGetQipuInfo`（详情请求方法），它是非混淆名，历史稳定。
+
+## 无浏览器快速诊断法（v1.3.7 修复时的新套路）
+
+不需要 CDP Chrome / Playwright，直接把线上 bundle 拉下来做静态分析，几分钟定位改名：
+
+1. `curl -s https://h5login.qqchess.qq.com/` → HTML 里找到 `application.<hash>.js`（Chaos VM 混淆，不用读它）
+2. `grep -oE '[A-Za-z0-9./_-]*\.json' application.js` → 得到 `src/settings.<hash>.json`
+3. settings.json 的 `assets.bundleVers` 里查 `scripts` 的 hash → 下载 `assets/scripts/index.<hash>.js`（约 13MB，象棋业务逻辑都在这一个文件里）
+4. 用稳定锚点定位：`TRequestGetDataList`、`85131`（列表请求）、`requestGetQipuInfo`、`85054`、`collectDataInfo`（详情链路），对比周边的混淆短名是否变化
+
+注意 bundle 里五子棋（日志前缀 `[Five]`）和象棋各有一套 QipuModel/Controller，认准象棋那套（其 `requestGetQipuInfo` 里 `iDataType=13`）。

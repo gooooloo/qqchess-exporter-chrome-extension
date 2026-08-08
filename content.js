@@ -45,31 +45,115 @@
     } catch (e) {}
   }
 
+  // 详情响应经 Model 的事件分发方法回来（历史: ba→sa），名字同样会被混淆器重排，运行时识别。
+  // 识别签名: 4 个形参、函数体内含 this.<X>.<自身名>(参1,参2,参3) 的三参转发调用。
+  var _dispatchMethodName = null;
+  var _dispatchHookInstalled = false;
+  var _pendingQipuResolvers = {};
+
+  function collectFunctionNames(obj) {
+    var seen = {};
+    var names = [];
+    var o = obj;
+    while (o && o !== Object.prototype) {
+      var keys = Object.getOwnPropertyNames(o);
+      for (var i = 0; i < keys.length; i++) {
+        var k = keys[i];
+        if (seen[k]) continue;
+        seen[k] = true;
+        try {
+          if (typeof obj[k] === 'function') names.push(k);
+        } catch (e) {}
+      }
+      o = Object.getPrototypeOf(o);
+    }
+    return names;
+  }
+
+  function detectDispatchMethod(qipuModel) {
+    try {
+      var funcs = collectFunctionNames(qipuModel);
+      var esc = function(t) { return t.replace(/\$/g, '\\$'); };
+      for (var i = 0; i < funcs.length; i++) {
+        var k = funcs[i];
+        try {
+          var fn = qipuModel[k];
+          if (fn.length !== 4) continue;
+          var s = fn.toString();
+          var m = s.match(/^function\s*[\w$]*\s*\(([^)]*)\)/);
+          if (!m) continue;
+          var params = m[1].split(',').map(function(p) { return p.trim(); });
+          if (params.length !== 4) continue;
+          var re = new RegExp('this\\.[\\w$]+\\.' + esc(k) + '\\(' +
+            esc(params[0]) + ',' + esc(params[1]) + ',' + esc(params[2]) + '\\)');
+          if (re.test(s)) return k;
+        } catch (e) {}
+      }
+    } catch (e) {}
+    // 兜底：直接试历史名字
+    if (typeof qipuModel.sa === 'function') return 'sa';
+    if (typeof qipuModel.ba === 'function') return 'ba';
+    return null;
+  }
+
+  function extractCollectData(data) {
+    if (data && data.param && data.param.collectDataInfo &&
+        typeof data.param.collectDataInfo.lDataID !== 'undefined') {
+      return data.param.collectDataInfo;
+    }
+    if (data && data.collectData && typeof data.collectData.lDataID !== 'undefined') {
+      return data.collectData;
+    }
+    return null;
+  }
+
+  // 常驻的单个共享 hook，按 lDataID 分发给等待中的 fetch。
+  // 不能每次 fetch 各自 patch/restore：并发时先返回的 restore 会把后装的 hook 挤掉，导致对方超时。
+  function installDispatchHook(qipuModel) {
+    if (_dispatchHookInstalled) return true;
+    if (!_dispatchMethodName || typeof qipuModel[_dispatchMethodName] !== 'function') {
+      _dispatchMethodName = detectDispatchMethod(qipuModel);
+    }
+    if (!_dispatchMethodName) return false;
+
+    var orig = qipuModel[_dispatchMethodName];
+    qipuModel[_dispatchMethodName] = function(eventName, data) {
+      var info = extractCollectData(data);
+      if (info) {
+        var key = String(info.lDataID);
+        var resolver = _pendingQipuResolvers[key];
+        if (resolver) {
+          delete _pendingQipuResolvers[key];
+          resolver(info);
+          return; // 吞掉事件，避免页面弹出棋谱界面
+        }
+      }
+      return orig.apply(this, arguments);
+    };
+    _dispatchHookInstalled = true;
+    return true;
+  }
+
   function fetchQipuData(qipuModel, qipuId) {
     return new Promise(function(resolve, reject) {
-      var origBa = qipuModel.ba;
+      if (!installDispatchHook(qipuModel)) {
+        reject(new Error('找不到详情回调方法（天天象棋前端可能升级了，请检查 DEBUGGING.md）'));
+        return;
+      }
+
+      var key = String(qipuId);
       var timeoutId = setTimeout(function() {
-        qipuModel.ba = origBa;
+        delete _pendingQipuResolvers[key];
         reject(new Error('Timeout fetching qipu ' + qipuId));
       }, 15000);
 
-      qipuModel.ba = function(eventName, data) {
-        if (data && data.param && data.param.collectDataInfo &&
-            data.param.collectDataInfo.lDataID == qipuId) {
-          clearTimeout(timeoutId);
-          qipuModel.ba = origBa;
-          resolve(data.param.collectDataInfo);
-          return;
-        }
-        if (data && data.collectData && data.collectData.lDataID == qipuId) {
-          clearTimeout(timeoutId);
-          qipuModel.ba = origBa;
-          resolve(data.collectData);
-          return;
-        }
-        origBa.call(qipuModel, eventName, data);
+      _pendingQipuResolvers[key] = function(collectData) {
+        clearTimeout(timeoutId);
+        resolve(collectData);
       };
 
+      // 注意：新版 requestGetQipuInfo 命中页面本地棋谱缓存时会同步走 khb→分发方法，
+      // 所以必须先注册 resolver 再发请求。
       qipuModel.requestGetQipuInfo(String(qipuId), -1, false, 99, false, false);
     });
   }
@@ -79,18 +163,15 @@
   }
 
 
-  // 请求方法名和列表数组名在不同 bundle 版本里会变（历史: Sj→Xj→Yj→fk; Beb→Wfb→qgb→skb/tkb），
+  // 请求方法名和列表数组名在不同 bundle 版本里会变（历史: Sj→Xj→Yj→fk→Bj; Beb→Wfb→qgb→skb/tkb），
   // 全部运行时识别并缓存。
   var _listArrayName = null;
   var _fetchMethodName = null;
 
-  // 识别策略: prototype 上签名匹配 TRequestGetDataList + requestData(85131, ...) 的方法
+  // 识别策略: 原型链上签名匹配 TRequestGetDataList + requestData(85131, ...) 的方法
   function detectFetchMethod(qipuModel) {
     try {
-      var proto = Object.getPrototypeOf(qipuModel);
-      var funcs = Object.getOwnPropertyNames(proto).filter(function(k) {
-        return typeof qipuModel[k] === 'function';
-      });
+      var funcs = collectFunctionNames(qipuModel);
       for (var i = 0; i < funcs.length; i++) {
         var k = funcs[i];
         try {
@@ -246,7 +327,7 @@
         var filename = 'qqchess_' + now.getFullYear() +
           ('0' + (now.getMonth() + 1)).slice(-2) +
           ('0' + now.getDate()).slice(-2) + '.pgn';
-        sendDone({ count: finalResults.length, cached: cached, fetched: fetched, pgn: pgn, filename: filename });
+        sendDone({ count: finalResults.length, cached: cached, fetched: fetched, failed: failed, pgn: pgn, filename: filename });
       }
     }
 
@@ -307,8 +388,8 @@
     }
   }
 
-  function sendGameList(games) {
-    window.postMessage({ type: 'QQCHESS_GAME_LIST', payload: { games: games } }, '*');
+  function sendGameList(games, failed) {
+    window.postMessage({ type: 'QQCHESS_GAME_LIST', payload: { games: games, failed: failed || 0 } }, '*');
   }
 
   function parseResult(sData) {
@@ -351,6 +432,7 @@
       var DELAY = 200;
       var loadedGames = new Array(total);
       var completed = 0;
+      var failedCount = 0;
       var nextIdx = 0;
 
       function onGameLoaded() {
@@ -372,7 +454,7 @@
               blackName: g.blackName,
               result: g.result
             };
-          }));
+          }), failedCount);
         }
       }
 
@@ -441,6 +523,7 @@
           })
           .catch(function(err) {
             console.error('Failed to fetch qipu ' + game.qipuId + ':', err);
+            failedCount++;
             onGameLoaded();
             sleep(DELAY).then(function() {
               var next = nextIdx++;
